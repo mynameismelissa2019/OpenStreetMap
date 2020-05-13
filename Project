@@ -1,0 +1,358 @@
+import os
+os.getcwd()
+os.chdir('C:\\Users\\mynam\\OneDrive\\Documents\\0_Udacity\\4_Data Wrangling')
+os.getcwd()# Background Info
+OSM_FILE = 'Providence2'
+
+
+import xml.etree.cElementTree as ET
+from collections import defaultdict
+import pprint
+
+# This counts the different tags in the file
+def count_tags(file):
+    tag_count = defaultdict(int)
+    for _, element in ET.iterparse(file):
+        tag_count[element.tag]+=1
+    return tag_count
+
+count_tags(OSM_FILE)
+
+# Audit the File
+
+# This code categorizes the different ways that an address is written so that we can standardize it later
+
+import xml.etree.ElementTree as ET
+import pprint
+import re
+
+capitalized_re = re.compile(r'^[A-Z][a-z]*\s+([A-Z]?[a-z]*|\s+)*$')
+uppercase_re = re.compile(r'^([A-Z|_|\s+])+$')
+lower_re = re.compile(r'^([a-z]|_|\s+)+$')
+capitalized_colon_re = re.compile(r'^[A-Z][a-z]+\s+([A-Z][a-z]*|\s+|:)*$')
+uppercase_colon_re = re.compile(r'^([A-Z|_|\s+|:])+$')
+lower_colon_re = re.compile(r'^([a-z]|_)*:([a-z]|_)*$')
+problem_chars_re = re.compile(r'[=\+/&<>;\'"\?%#$@\,\. \t\r\n]')
+
+counter_address_types = {"uppercase": 0, "capitalized": 0, "lower": 0, "uppercase_colon": 0, "capitalized_colon": 0,
+                "lower_colon": 0, "problem_chars": 0, "other": 0}
+
+def key_type(element, keys):
+    if element.tag == "tag":
+        key = element.get("k")
+        # value = element.get("v")
+        if capitalized_re.search(key):
+            keys['uppercase'] += 1
+        elif uppercase_re.search(key):
+            keys['capitalized'] += 1
+        elif lower_re.search(key):
+            keys['lower'] += 1
+        elif capitalized_colon_re.search(key):
+            keys['uppercase_colon'] += 1
+        elif uppercase_colon_re.search(key):
+            keys['capitalized_colon'] += 1
+        elif lower_colon_re.search(key):
+            keys['lower_colon'] += 1
+        elif problem_chars_re.search(key):
+            keys['problem_chars'] += 1
+        else:
+            keys['other'] += 1
+    return keys
+def process_map(filename):
+    keys = {"uppercase": 0, "capitalized": 0, "lower": 0, "uppercase_colon": 0, "capitalized_colon": 0,
+                "lower_colon": 0, "problem_chars": 0, "other": 0}
+    for _, element in ET.iterparse(filename):
+        keys = key_type(element, keys)
+    return keys
+
+def test():
+    keys = process_map(OSM_FILE)
+    pprint.pprint(keys)
+if __name__ == "__main__":
+    test()
+    def get_user(element):
+    return
+
+def users_process_map(filename):
+    users = set()
+    for _, element in ET.iterparse(filename):
+        if 'uid' in element.attrib:
+            users.add(element.get('uid'))
+    return users
+
+def test():
+    users = users_process_map(OSM_FILE)
+    pprint.pprint (len(users))
+
+if __name__ == "__main__":
+    test()
+    
+ # This identifies the different street types, what we expect, and changes we can predict needing
+street_types = defaultdict(set)
+street_type_re = re.compile(r'\b\S+\.?$', re.IGNORECASE)
+
+expected = ["Street", "Avenue", "Boulevard", "Drive", "Court", "Place", "Square", "Lane", "Road",
+            "Trail", "Parkway", "Commons", "Terrace", "Pike", "Alley", "Plaza", "Hill"]
+
+mapping = { "St": "Street",
+            "St.": "Street",
+            "st": "Street",
+            "Sq.": "Square",
+            "Ave": "Avenue",
+            "ave": "Avenue",
+            "Rd": "Road",
+            "Rd.": "Road",
+            "Pkwy" : "Parkway",
+            "Blvd": "Boulevard", 
+            "Dr": "Drive", 
+            "Ct": "Court", 
+            "Ct.": "Court",
+            "Ln": "Lane", 
+            "Wy": "Way"
+            }
+street_type_set = set()
+
+def audit_street_type(street_types, street_name):
+
+    street_type = street_type_re.search(street_name)
+
+    if street_type:
+        street_type = street_type.group()
+        street_type = street_type.strip()
+
+        street_type_set.add(street_type)
+        
+def is_street_name(elem):
+    return (elem.attrib['k'] == "addr:street")
+def audit(osmfile):
+    osm_file = open(osmfile, "r", encoding="utf8")
+    street_types = defaultdict(set)
+    for event, elem in ET.iterparse(osm_file, events=("start",)):
+
+        if elem.tag == "node" or elem.tag == "way":
+            for tag in elem.iter("tag"):
+                if is_street_name(tag):
+                    audit_street_type(street_types, tag.attrib['v'])
+    osm_file.close()
+    return street_types
+
+def update_name(name, mapping):
+    name_array = name.split(' ')
+    last = name_array[-1]
+    name_array[-1] = mapping[last]
+    return ' '.join(name_array)
+
+
+def test():
+    st_types = audit(OSM_FILE)
+    pprint.pprint(dict(st_types))
+
+if __name__ == '__main__':
+    test()
+    print()
+print("street_types:")
+pprint.pprint(street_types)
+
+# Improve the File
+
+import xml.etree.ElementTree as ET
+import pprint
+import re
+import codecs
+import csv
+
+LOWER_COLON = re.compile(r'^([a-z]|_)+:([a-z]|_)+')
+PROBLEMCHARS = re.compile(r'[=\+/&<>;\'"\?%#$@\,\. \t\r\n]')
+NODES_PATH = 'Providence_Node.csv'
+NODE_TAGS_PATH = 'Providence_Node_Tag.csv'
+WAYS_PATH = 'Providence_Way.csv'
+WAY_TAGS_PATH = 'Providence_Way_tag.csv'
+WAY_NODES_PATH = 'Providence_Way_Node.csv'
+
+# Make sure the fields order in the csvs matches the column order in the sql table schema
+NODE_FIELDS = ['id', 'lat', 'lon', 'version']
+NODE_TAGS_FIELDS = ['id', 'key', 'value', 'type']
+WAY_FIELDS = ['id', 'version']
+WAY_TAGS_FIELDS = ['id', 'key', 'value', 'type']
+WAY_NODES_FIELDS = ['id', 'node_id', 'position']
+
+def shape_element(element, node_attr_fields=NODE_FIELDS, way_attr_fields=WAY_FIELDS, 
+                  problem_chars=PROBLEMCHARS, default_tag_type='regular'):
+    node_attribs = {}
+    way_attribs = {}
+    way_nodes = []
+    tag = []
+
+    if tag in element.iter("node"):
+        for field in node_attr_fields:
+            node_attribs[field] = tag.attrib[field]
+        
+        for tag in element.iter('tag'):
+            if tag.attrib['v'] == 'cafe':
+                is_cafe = True
+        
+        for tag in element.iter('tag'):
+            entries = {}
+            entries['id'] = int(node_attribs['id'])
+            entries['lat'] = float(node_attribs['lat'])
+            entries['lat'] = float(node_attribs['lat'])
+            entries['version'] = node_attribs['version']
+            entries['value'] = audit.audit_v(is_cafe, tag)
+
+            entries = audit_k(tag, entries, default_tag_type)
+            tags.append(entries)
+        return {'node': node_attribs, 'node_tags': tags}
+
+        
+    elif tag in element.iter("way"):
+        for field in way_attr_fields:
+            way_attribs[field]=tag.attrib[field]
+        
+        entries = {}
+        entries['id'] = int(node_attribs['id'])
+        entries['version'] = node_attribs['version']    
+        entries['value'] = audit.audit_v(is_cafe, tag)
+            
+        entries = audit_k(tag, entries, default_tag_type)
+        tags.append(entries)
+            
+        i = 0
+        for tag in element.iter('nd'):
+            entriesnd = {}
+            entriesnd['id'] = way_attribs['id']
+            entriesnd['node_id'] = tag.attrib['ref']
+            entriesnd['position'] = i
+            i+=1
+            way_nodes.append(entriesnd)
+        
+        return {'way': way_attributes, 'way_nodes': way_nodes, 'way_tags': tags}
+    SCHEMA = {
+    'node': {
+        'type': 'dict',
+        'schema': {
+            'id': {'required': True, 'type': 'integer', 'coerce': int},
+            'lat': {'required': True, 'type': 'float', 'coerce': float},
+            'lon': {'required': True, 'type': 'float', 'coerce': float},
+            'version': {'required': True, 'type': 'string'}
+        }
+    },
+    'node_tags': {
+        'type': 'list',
+        'schema': {
+            'type': 'dict',
+            'schema': {
+                'id': {'required': True, 'type': 'integer', 'coerce': int},
+                'key': {'required': True, 'type': 'string'},
+                'value': {'required': True, 'type': 'string'},
+                'type': {'required': True, 'type': 'string'}
+            }
+        }
+    },
+    'way': {
+        'type': 'dict',
+        'schema': {
+            'id': {'required': True, 'type': 'integer', 'coerce': int},
+            'user': {'required': True, 'type': 'string'},
+            'uid': {'required': True, 'type': 'integer', 'coerce': int},
+            'version': {'required': True, 'type': 'string'},
+            'changeset': {'required': True, 'type': 'integer', 'coerce': int},
+            'timestamp': {'required': True, 'type': 'string'}
+        }
+    },
+    'way_nodes': {
+        'type': 'list',
+        'schema': {
+            'type': 'dict',
+            'schema': {
+                'id': {'required': True, 'type': 'integer', 'coerce': int},
+                'node_id': {'required': True, 'type': 'integer', 'coerce': int},
+                'position': {'required': True, 'type': 'integer', 'coerce': int}
+            }
+        }
+    },
+    'way_tags': {
+        'type': 'list',
+        'schema': {
+            'type': 'dict',
+            'schema': {
+                'id': {'required': True, 'type': 'integer', 'coerce': int},
+                'key': {'required': True, 'type': 'string'},
+                'value': {'required': True, 'type': 'string'},
+                'type': {'required': True, 'type': 'string'}
+            }
+        }def get_element(osm_file, tags=('node', 'way', 'relation')):
+
+    context = ET.iterparse(osm_file, events=('start', 'end'))
+    _, root = next(context)
+    for event, elem in context:
+        if event == 'end' and elem.tag in tags:
+            yield elem
+            
+            
+def validate_element(element, validator, schema=SCHEMA):
+    """Raise ValidationError if element does not match schema"""
+    if validator.validate(element, schema) is not True:
+        field, errors = next(validator.errors.iteritems())
+        message_string = "\nElement of type '{0}' has the following errors:\n{1}"
+        error_string = pprint.pformat(errors)
+
+        raise Exception(message_string.format(field, error_string))
+        
+class UnicodeDictWriter(csv.DictWriter, object):
+    """Extend csv.DictWriter to handle Unicode input"""
+    '''
+    The method has been modified in order to work in windows environment
+    '''
+
+    def writerow(self, row):
+        super(UnicodeDictWriter, self).writerow({
+            k: v for k, v in row.items()
+        })
+
+    def writerows(self, rows):
+        for row in rows:
+            self.writerow(row)
+            
+def process_map_csv(file_in, validate):
+    """Iteratively process each XML element and write to csv(s)"""
+
+    with codecs.open(NODES_PATH, 'w', encoding='utf8') as nodes_file, \
+        codecs.open(NODE_TAGS_PATH, 'w', encoding='utf8') as nodes_tags_file, \
+        codecs.open(WAYS_PATH, 'w', encoding='utf8') as ways_file, \
+        codecs.open(WAY_NODES_PATH, 'w', encoding='utf8') as way_nodes_file, \
+        codecs.open(WAY_TAGS_PATH, 'w', encoding='utf8') as way_tags_file:
+
+        nodes_writer = UnicodeDictWriter(nodes_file, NODE_FIELDS)
+        node_tags_writer = UnicodeDictWriter(nodes_tags_file, NODE_TAGS_FIELDS)
+        ways_writer = UnicodeDictWriter(ways_file, WAY_FIELDS)
+        way_nodes_writer = UnicodeDictWriter(way_nodes_file, WAY_NODES_FIELDS)
+        way_tags_writer = UnicodeDictWriter(way_tags_file, WAY_TAGS_FIELDS)
+
+        nodes_writer.writeheader()
+        node_tags_writer.writeheader()
+        ways_writer.writeheader()
+        way_nodes_writer.writeheader()
+        way_tags_writer.writeheader()
+
+
+        for element in get_element(file_in, tags=('node', 'way')):
+            el = shape_element(element)
+            if el:
+                if validate is True:
+                    validate_element(el, validator)
+
+                if element.tag == 'node':
+                    nodes_writer.writerow(el['node'])
+                    node_tags_writer.writerows(el['node_tags'])
+                elif element.tag == 'way':
+                    ways_writer.writerow(el['way'])
+                    way_nodes_writer.writerows(el['way_nodes'])
+                    way_tags_writer.writerows(el['way_tags'])
+
+if __name__ == '__main__':
+    process_map_csv(OSM_FILE, validate=True)
+    }
+}
+    
+ 
+
